@@ -6,4 +6,4 @@ https://aur.archlinux.org/packages/logitechmediaserver/
 and
 https://aur.archlinux.org/packages/logitechmediaserver-git/
 
-It excludes prebuilt CPAN Libraries and maybe some other components to reduce dowload size.
+It excludes prebuilt CPAN Libraries and maybe some other components to reduce download size.
