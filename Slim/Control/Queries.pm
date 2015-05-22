@@ -1773,7 +1773,7 @@ sub librariesQuery {
 	if ( $request->isQuery([['libraries'], ['getid']]) && (my $client = $request->client) ) {
 		my $id = Slim::Music::VirtualLibraries->getLibraryIdForClient($client) || 0;
 		$request->addResult('id', $id);
-		$request->addResult('name', Slim::Music::VirtualLibraries->getNameForId($id)) if $id;
+		$request->addResult('name', Slim::Music::VirtualLibraries->getNameForId($id, $client)) if $id;
 	}
 	else {
 		my $i = 0;	
@@ -1892,6 +1892,8 @@ sub mediafolderQuery {
 	# url overrides any folderId
 	my $params = ();
 	my $mediaDirs = Slim::Utils::Misc::getMediaDirs($type || 'audio');
+	
+	$params->{recursive} = $request->getParam('recursive');
 	
 	# add "volatile" folders which are not scanned, to be browsed and played on the fly
 	push @$mediaDirs, map { 
@@ -3531,7 +3533,7 @@ sub statusQuery {
 	
 	if (my $library_id = Slim::Music::VirtualLibraries->getLibraryIdForClient($client)) {
 		$request->addResult("library_id", $library_id);
-		$request->addResult("library_name", Slim::Music::VirtualLibraries->getNameForId($library_id));
+		$request->addResult("library_name", Slim::Music::VirtualLibraries->getNameForId($library_id, $client));
 	}
 
 	# add showBriefly info
