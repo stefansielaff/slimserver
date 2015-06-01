@@ -26,10 +26,9 @@ my $prefs = preferences('server');
 
 sub tracks {
 	my $self = shift;
+	my $library_id = shift;
 	
-	my %attributes = (order_by => 'me.position');
-	
-	return $self->playlist_tracks(undef, \%attributes);
+	return Slim::Schema->rs('PlaylistTrack')->getTracks($self->id, $library_id);
 }
 
 sub setTracks {
