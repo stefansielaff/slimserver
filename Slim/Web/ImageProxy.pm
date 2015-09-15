@@ -244,9 +244,13 @@ sub _gotArtworkError {
 	
 	my $error = 404;
 	
-	if ($http->headers->content_type =~ /text/) {
+	if ($http->headers && $http->headers->content_type =~ /text/) {
 		$error = 500;
 		main::INFOLOG && $log->is_info && $log->info("Server returned error: " . $http->content);
+	}
+	elsif ($http->error && $http->error =~ /(\d{3})/) {
+		$error = $1;
+		main::INFOLOG && $log->is_info && $log->info("Server returned error: " . $http->error);
 	}
 
 	# File does not exist, return error
