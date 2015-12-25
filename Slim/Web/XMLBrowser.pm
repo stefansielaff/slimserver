@@ -496,13 +496,12 @@ sub handleFeed {
 						$log->debug( "Fetching OPML from coderef $cbname" );
 					}
 
-					# XXX: maybe need to pass orderBy through
-					my %args = (isWeb => 1, wantMetadata => 1, wantIndex => 1, search => $search, params => $stash->{'query'}, library_id => $stash->{library_id});
+					my %args = (isWeb => 1, wantMetadata => 1, wantIndex => 1, search => $search, params => $stash->{'query'}, library_id => $stash->{library_id}, orderBy => $stash->{'orderBy'});
 					my $index = $stash->{'start'};
 
 					if ($depth == $levels) {
 						$args{'index'} = $index;
-						$args{'quantity'} = $stash->{'itemsPerPage'} || $prefs->get('itemsPerPage');
+						$args{'quantity'} = $stash->{'itemsPerPage'} || ($stash->{action} =~ /^(?:play|add)all$/i && $prefs->get('maxPlaylistLength')) || $prefs->get('itemsPerPage');
 					} elsif ($depth < $levels) {
 						$args{'index'} = $index[$depth];
 						$args{'quantity'} = 1;

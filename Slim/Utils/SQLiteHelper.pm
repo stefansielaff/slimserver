@@ -348,6 +348,7 @@ sub exitScan {
 Called immediately after connect.  Sets up MD5() function.
 
 =cut
+my %postConnectHandlers;
 
 sub postConnect {
 	my ( $class, $dbh ) = @_;
@@ -375,6 +376,30 @@ sub postConnect {
 			}
 		}
 	}
+	
+	foreach (keys %postConnectHandlers) {
+		$_->postDBConnect($dbh);
+	}
+}
+
+=head2
+
+Allow plugins and others to register handlers which should be called from postConnect
+
+=cut
+
+sub addPostConnectHandler {
+	my ( $class, $handler ) = @_;
+	
+	if ($handler && $handler->can('postDBConnect')) {
+		$postConnectHandlers{$handler}++
+	}
+	
+	# if we register for the first time, re-initialize the dbh object
+	if ( $postConnectHandlers{$handler} == 1 ) {
+		Slim::Schema->disconnect;
+		Slim::Schema->init;
+	}
 }
 
 sub updateProgress {
@@ -387,7 +412,8 @@ sub updateProgress {
 	
 	my $log = logger('scan.scanner');
 	
-	# Scanner does not have an event loop, so use sync HTTP here
+	# Scanner does not have an event loop, so use sync HTTP here.
+	# Don't use Slim::Utils::Network, as it comes with too much overhead.
 	my $host = ( $prefs->get('httpaddr') || '127.0.0.1' ) . ':' . $prefs->get('httpport');
 	
 	my $ua = LWP::UserAgent->new(

@@ -1,7 +1,5 @@
 package Slim::Control::Queries;
 
-# $Id:  $
-#
 # Logitech Media Server Copyright 2001-2011 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
@@ -1713,7 +1711,7 @@ sub infoTotalQuery {
 	my $request = shift;
 
 	# check this is the correct query.
-	if ($request->isNotQuery([['info'], ['total'], ['genres', 'artists', 'albums', 'songs']])) {
+	if ($request->isNotQuery([['info'], ['total'], ['genres', 'artists', 'albums', 'songs', 'duration']])) {
 		$request->setStatusBadDispatch();
 		return;
 	}
@@ -1723,10 +1721,10 @@ sub infoTotalQuery {
 		return;
 	}
 	
-	my $totals = Slim::Schema->totals($request->client);
-	
 	# get our parameters
 	my $entity = $request->getRequest(2);
+	
+	my $totals = Slim::Schema->totals($request->client) if $entity ne 'duration';
 
 	if ($entity eq 'albums') {
 		$request->addResult("_$entity", $totals->{album});
@@ -1739,6 +1737,9 @@ sub infoTotalQuery {
 	}
 	elsif ($entity eq 'songs') {
 		$request->addResult("_$entity", $totals->{track});
+	}
+	elsif ($entity eq 'duration') {
+		$request->addResult("_$entity", Slim::Schema->totalTime($request->client));
 	}
 	
 	$request->setStatusDone();
@@ -3178,6 +3179,7 @@ sub serverstatusQuery {
 		$request->addResult("info total artists", $totals->{contributor});
 		$request->addResult("info total genres", $totals->{genre});
 		$request->addResult("info total songs", $totals->{track});
+		$request->addResult("info total duration", Slim::Schema->totalTime());
 	}
 
 	my %savePrefs;
@@ -3781,10 +3783,18 @@ sub statusQuery {
 		my $quantity = $request->getParam('_quantity');
 		
 		my $loop = $menuMode ? 'item_loop' : 'playlist_loop';
+		my $totalOnly;
 		
 		if ( $menuMode ) {
 			# Set required tags for menuMode
 			$tags = 'aAlKNcxJ';
+		}
+		# DD - total playtime for the current playlist, nothing else returned
+		elsif ( $tags =~ /DD/ ) {
+			$totalOnly = 1;
+			$tags = 'd';
+			$index = 0;
+			$quantity = $songCount;
 		}
 		else {
 			$tags = 'gald' if !defined $tags;
@@ -3802,16 +3812,20 @@ sub statusQuery {
 		# we need to be sure we have the latest data from the DB if ratings are requested
 		my $refreshTrack = $tags =~ /R/;
 		
-		my $track = Slim::Player::Playlist::song($client, $playlist_cur_index, $refreshTrack);
-
-		if ($track->remote) {
-			$tags .= "B"; # include button remapping
-			my $metadata = _songData($request, $track, $tags);
-			$request->addResult('remoteMeta', $metadata);
+		my $track;
+		
+		if (!$totalOnly) {
+			$track = Slim::Player::Playlist::song($client, $playlist_cur_index, $refreshTrack);
+	
+			if ($track->remote) {
+				$tags .= "B" unless $totalOnly; # include button remapping
+				my $metadata = _songData($request, $track, $tags);
+				$request->addResult('remoteMeta', $metadata);
+			}
 		}
 
 		# if repeat is 1 (song) and modecurrent, then show the current song
-		if ($modecurrent && ($repeat == 1) && $quantity) {
+		if ($modecurrent && ($repeat == 1) && $quantity && !$totalOnly) {
 
 			$request->addResult('offset', $playlist_cur_index) if $menuMode;
 
@@ -3859,10 +3873,12 @@ sub statusQuery {
 				} ) if scalar @trackIds;
 				
 				# no need to use Tie::IxHash to preserve order when we return JSON Data
-				my $fast = ($request->source && $request->source =~ m{/slim/request\b|JSONRPC}) ? 1 : 0;
-				
+				my $fast = ($totalOnly || ($request->source && $request->source =~ m{/slim/request\b|JSONRPC|internal})) ? 1 : 0;
+
 				# Slice and map playlist to get only the requested IDs
 				$idx = $start;
+				my $totalDuration = 0;
+				
 				foreach( @tracks ) {
 					# Use songData for track, if remote use the object directly
 					my $data = ref $_ ? $_ : $songData->{$_};
@@ -3871,7 +3887,11 @@ sub statusQuery {
 					# references a track not in the db yet, we can fail
 					next if !$data;
 
-					if ($menuMode) {
+					if ($totalOnly) {
+						my $trackData = _songData($request, $data, $tags, $fast);
+						$totalDuration += $trackData->{duration};
+					}
+					elsif ($menuMode) {
 						_addJiveSong($request, $loop, $count, $idx, $data);
 						# add clear and save playlist items at the bottom
 						if ( ($idx+1)  == $songCount) {
@@ -3893,8 +3913,12 @@ sub statusQuery {
 					main::idleStreams() if ! ($count % 20);
 				}
 				
+				if ($totalOnly) {
+					$request->addResult('playlist duration', $totalDuration || 0);
+				}
+				
 				# we don't do that in menu mode!
-				if (!$menuMode) {
+				if (!$menuMode && !$totalOnly) {
 				
 					my $repShuffle = $prefs->get('reshuffleOnRepeat');
 					my $canPredictFuture = ($repeat == 2)  			# we're repeating all
@@ -4793,13 +4817,15 @@ sub _songDataFromHash {
 	$returnHash{id}    = $res->{'tracks.id'};
 	$returnHash{title} = $res->{'tracks.title'};
 	
+	my @contributorRoles = Slim::Schema::Contributor->contributorRoles;
+	
 	# loop so that stuff is returned in the order given...
 	for my $tag (split (//, $tags)) {
 		my $tagref = $tagMap{$tag} or next;
 		
 		# Special case for A/S which return multiple keys
 		if ( $tag eq 'A' ) {
-			for my $role ( Slim::Schema::Contributor->contributorRoles ) {
+			for my $role ( @contributorRoles ) {
 				$role = lc $role;
 				if ( defined $res->{$role} ) {
 					$returnHash{$role} = $res->{$role};
@@ -4807,7 +4833,7 @@ sub _songDataFromHash {
 			}
 		}
 		elsif ( $tag eq 'S' ) {
-			for my $role ( Slim::Schema::Contributor->contributorRoles ) {
+			for my $role ( @contributorRoles ) {
 				$role = lc $role;
 				if ( defined $res->{"${role}_ids"} ) {
 					$returnHash{"${role}_ids"} = $res->{"${role}_ids"};
@@ -5397,7 +5423,7 @@ sub _getTagDataForTracks {
 		}
 
 		push @{$p}, map { Slim::Schema::Contributor->typeToRole($_) } @roles;
-		push @{$w}, 'contributors.id = tracks.primary_artist' if $args->{trackIds};
+		push @{$w}, '(contributors.id = tracks.primary_artist OR tracks.primary_artist IS NULL)' if $args->{trackIds};
 		push @{$w}, 'contributor_track.role IN (' . join(', ', map {'?'} @roles) . ')';
 	};
 	
@@ -5459,25 +5485,35 @@ sub _getTagDataForTracks {
 	
 	# Add selected columns
 	# Bug 15997, AS mapping needed for MySQL
-	my @cols = keys %{$c};
+	my @cols = sort keys %{$c};
 	$sql = sprintf $sql, join( ', ', map { $_ . " AS '" . $_ . "'" } @cols );
 	
 	my $dbh = Slim::Schema->dbh;
 	
 	if ( $count_only || (my $limit = $args->{limit}) ) {
 		# Let the caller worry about the limit values
-		
-		my $total_sth = $dbh->prepare_cached( qq{
-			SELECT COUNT(1) FROM ( $sql ) AS t1
-		} );
 
-		if ( main::DEBUGLOG && $sqllog->is_debug ) {
-			$sqllog->debug( "Titles totals query: SELECT COUNT(1) FROM ($sql) / " . Data::Dump::dump($p) );
+		my $cacheKey = md5_hex($sql . join( '', @{$p} ));
+		
+		# use short lived cache, as we might be dealing with changing data (eg. playcount)
+		if ( my $cached = $bmfCache{$cacheKey} ) {
+			$total = $cached;
 		}
+		else {
+			my $total_sth = $dbh->prepare_cached( qq{
+				SELECT COUNT(1) FROM ( $sql ) AS t1
+			} );
+	
+			if ( main::DEBUGLOG && $sqllog->is_debug ) {
+				$sqllog->debug( "Titles totals query: SELECT COUNT(1) FROM ($sql) / " . Data::Dump::dump($p) );
+			}
+				
+			$total_sth->execute( @{$p} );
+			($total) = $total_sth->fetchrow_array();
+			$total_sth->finish;
 			
-		$total_sth->execute( @{$p} );
-		($total) = $total_sth->fetchrow_array();
-		$total_sth->finish;
+			$bmfCache{$cacheKey} = $total;
+		}
 		
 		my ($valid, $start, $end);
 		($valid, $start, $end) = $limit->($total) unless $count_only;
