@@ -1,0 +1,39 @@
+[% PROCESS settings/header.html %]
+	[% WRAPPER setting title="PLUGIN_REMOTE_LIBRARY_MODULE_NAME" desc="" %]
+		[% 'PLUGIN_REMOTE_LIBRARY_MODULE_NAME_DESC' | string %]
+	[% END %]
+
+	[% WRAPPER setting title="SQUEEZEBOX_SERVER" desc="PLUGIN_REMOTE_LIBRARY_LMS_DESC" %]
+		<select class="stdedit" name="pref_useLMS" id="noupnp">
+			<option [% IF prefs.pref_useLMS %]selected="selected" [% END %]value="1">
+				[% 'PLUGIN_REMOTE_LIBRARY_LMS_ENABLE' | string %]
+			</option>
+			<option [% IF !prefs.pref_useLMS %]selected="selected" [% END %]value="0">
+				[% 'PLUGIN_REMOTE_LIBRARY_LMS_DISABLE' | string %]
+			</option>
+		</select>
+	[% END %]
+
+	[% WRAPPER setting title="PLUGIN_REMOTE_LIBRARY_REMOTE_LMS" desc="PLUGIN_REMOTE_LIBRARY_REMOTE_LMS_DESC" %]
+		[% FOREACH server = prefs.pref_remoteLMS %]
+			<input type="text" class="stdedit" name="pref_remoteLMS[% loop.index %]" id="remoteLMS[% loop.index %]" value="[% server %]" placeholder="[% "PLUGIN_REMOTE_LIBRARY_REMOTE_LMS_PROMPT" | string | html %]" size="40">
+			[% IF remoteLMSDetails.$server %] [% remoteLMSDetails.$server.name %][% END %]<br>
+		[% END %]
+	[% END %]
+
+	[% WRAPPER setting title="PLUGIN_REMOTE_LIBRARY_SETUP_UPNP" desc="PLUGIN_REMOTE_LIBRARY_UPNP_DESC" %]
+		<select class="stdedit" name="pref_useUPnP" id="noupnp">
+			<option [% IF prefs.pref_useUPnP %]selected="selected" [% END %]value="1">
+				[% 'PLUGIN_REMOTE_LIBRARY_UPNP_ENABLE' | string %]
+			</option>
+			<option [% IF !prefs.pref_useUPnP %]selected="selected" [% END %]value="0">
+				[% 'PLUGIN_REMOTE_LIBRARY_UPNP_DISABLE' | string %]
+			</option>
+		</select>
+	[% END %]
+
+	[% WRAPPER setting title="PLUGIN_REMOTE_LIBRARY_IGNORE_MENU" desc="PLUGIN_REMOTE_LIBRARY_IGNORE_MENU_DESC" %]
+		<textarea class="stdedit" name="pref_ignoreFolders" id="ignoreFolders" cols="60" rows="4">[% prefs.pref_ignoreFolders | html %]</textarea>
+	[% END %]
+	
+[% PROCESS settings/footer.html %]
