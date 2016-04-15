@@ -58,7 +58,7 @@ sub _init_done {
 	# Sync all connected clients with SN
 	# New clients will be handled by clientEvent
 	for my $client ( Slim::Player::Client::clients() ) {
-		next unless $client->isa('Slim::Player::Squeezebox2');
+		next unless $client->isa('Slim::Player::Squeezebox2') && $client->deviceid !~ /^(?:3|6|8|11|12)/;
 		
 		Slim::Utils::Timers::setTimer(
 			$client,
@@ -91,7 +91,7 @@ sub clientEvent {
 	my $request = shift;
 	my $client  = $request->client;
 	
-	if ( !defined $client || !$client->isa('Slim::Player::Squeezebox2') ) {
+	if ( !defined $client || !$client->isa('Slim::Player::Squeezebox2') || $client->deviceid =~ /^(?:3|6|8|11|12)/ ) {
 		return;
 	}
 	
@@ -224,6 +224,10 @@ sub _syncDown_done {
 	# Client prefs
 	if ( $client ) {
 		my $cprefs = $prefs->client($client);
+		
+		if ( ($content->{next_sync} || 0) < 60 ) {
+			$content->{next_sync} = 300;
+		}
 	
 		$cprefs->set( snLastSyncDown => $content->{timestamp} );
 		$cprefs->set( snSyncInterval => $content->{next_sync} );
@@ -369,7 +373,7 @@ sub prefEvent {
 	my $request = shift;
 	my $client  = $request->client;
 	
-	if ( $client && !$client->isa('Slim::Player::Squeezebox2') ) {
+	if ( !defined $client || !$client->isa('Slim::Player::Squeezebox2') || $client->deviceid =~ /^(?:3|6|8|11|12)/ ) {
 		return;
 	}
 	

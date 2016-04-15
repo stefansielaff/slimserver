@@ -7,11 +7,11 @@
 				<li>Add option to use two browse modes for Album Artists and All Artists instead of one single, configurable list.</li>
 				<li>Add "Random Album" browse mode, to give access to a random selection of albums.</li>
 				<li>Add a "Browse Filesystem" mode to access files outside the music folder, without storing them in the database.</li>
-				<li>Add Drag'n'Drop support to the web UI: drag and drop audio files from your desktop's file manager (Finder, Explorer etc.) to the Logitech Media Server web interface to play them back.</li>
 				<li>Add possibility to browse music managed by an other Logitech Media Server instance and play music from it without the need to switch server.</li>
 				<li>Browse favorite Artists/Genres/Albums instead of just playing them when selected.</li>
 				<li>Add Extended Browse Modes plugin to further configure the library browsing experience.</li>
 				<li>Add support for "Virtual Libraries" or custom library views, to limit the browsing to a sub-set of your overall music collection.</li>
+				<li>Restore ability to play playlists from Browse Music Folder</li>
 				<li>Improved Browse Music Folder performance.</li>
 			</ul>
 		</li>
@@ -24,6 +24,8 @@
 				<li>Improve "Advanced Search": allow searching for ratings, ranges of years, save results, use results as virtual library etc.</li>
 				<li>Give (limited) control over other players connected to your server from the web UI: power them on/off or start/pause 
 				    playback without the need to switch the currently controlled player</li> 
+				<li>Add Drag'n'Drop support to the web UI: drag and drop audio files from your desktop's file manager (Finder, Explorer etc.) to the 
+				    Logitech Media Server web interface to play them back.</li>
 				<li>Allow the web UI's right hand side panel with player control and current playlist to be hidden.</li>
 				<li>Allow the web UI to be opened with a given navigation for the left hand navigation panel (eg. start with Album Artists).</li>
 				<li>Speed up library browsing in the web UI by caching rendered pages</li>
@@ -62,6 +64,7 @@
 		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=15604">#15604</a> - Provide a Browse Compilations browse mode.</li>
 		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=16506">#16506</a> - Honor read access given by ACLs (thanks htgoebel!).</li>
 		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=17081">#17081</a> - "Various Artists" setting should not be blank, but show the default value.</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=17454">#17454</a> - Unable to delete playlists with playlist rescan.</li>
 		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=17474">#17474</a> - Can't browse music folder during scan.</li>
 		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=17404">#17404</a> - Cue-sheet problems when navigated to via Music Folder.</li>
 		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=17526">#17526</a> - Push any firmware found in cache/updates to players, even if "Check for Updates" is disabled.</li>
@@ -96,6 +99,8 @@
 		<li>Add helper application binaries for ARM hard float systems</li>
 		<li>Add --nomysqueezebox startup parameter to disable all interaction with mysqueezebox.com</li>
 		<li>Move UPnP client code to Remote Library plugin. Remove now unnecessary --noupnp startup parameter.</li>
+		<li>Try to automatically recover from database corruption</li>
+		<li>Updated translations: Dutch (thanks pinkdot!), French (thanks minscof!), Polish (thanks matka &amp; Maciej (mh_)!)</li>
 	</ul>
 	<br />
 </ul>
@@ -207,6 +212,7 @@
 	<ul>
 		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=17727">#17727</a> - Playback stops with mp3 + cue sheets combination</li>
 		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=17901">#17901</a> - "Some settings were changed. Do you want to save them?" doesn't honor button clicked.</li>
+		<li><a href="http://bugs.slimdevices.com/show_bug.cgi?id=18078">#18078</a> - All files seen as changed after Daylight Saving time change (Windows only)</li>
 	</ul>
 	<br />
 </ul>

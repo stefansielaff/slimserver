@@ -2,7 +2,6 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html>
 	<head>
-		<meta http-equiv="X-UA-Compatible" content="IE=9" />
 		<title>[% "SQUEEZEBOX_SERVER" | string %] - [% "HELP" | string %]</title>
 
 		<link rel="stylesheet" type="text/css" href="/html/ext/resources/css/ext-all-notheme.css" />
@@ -23,14 +22,11 @@
 	</head>
 
 	<body class="singlePanel help">
-		<img id="background" src="[% webroot %]html/images/background.png" />
+		<div id="background"></div>
 
 		<div id="header">
-			<div id="header_left"></div>
-			<div id="header_content">
-				<span><img src="[% webroot %]html/images/spacer.gif" id="squeezeboxLogo"></span>
-				<span><a href="http://www.logitech.com" target="_blank"><img src="[% webroot %]html/images/spacer.gif" id="logitechLogo"></a></span>
-			</div>
+			<span><img src="[% webroot %]html/images/spacer.gif" id="squeezeboxLogo"></span>
+			<span><a href="http://www.logitech.com" target="_blank"><img src="[% webroot %]html/images/spacer.gif" id="logitechLogo"></a></span>
 		</div>
 
 		<div id="inner_header">
@@ -53,11 +49,7 @@
 			</div>
 		</div>
 
-		<div id="footer">
-			<div id="footer_left"></div>
-			<div id="footer_content">
-			</div>
-		</div>
+		<div id="footer"></div>
 
 	</body>
 </html>

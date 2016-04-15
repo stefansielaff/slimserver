@@ -108,7 +108,22 @@ sub scanner {
 
 sub canAutoUpdate { $_[0]->runningFromSource ? 0 : 1 }
 sub installerExtension { 'deb' }; 
-sub installerOS { 'deb' }
+
+sub installerOS {
+	my $class = shift;
+	
+	if ( $class->{osDetails}->{osArch} =~ /^arm/i ) {
+		return 'debarm';
+	} 
+	elsif ( $class->{osDetails}->{osArch} =~ /^x86_64/i ) {
+		return 'debamd64';
+	}
+	elsif ( $class->{osDetails}->{osArch} =~ /^i[3-6]86/i ) {
+		return 'debi386';
+	}
+
+	return 'deb';
+}
 
 sub getUpdateParams {
 	return {

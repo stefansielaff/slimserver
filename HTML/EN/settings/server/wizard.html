@@ -19,7 +19,7 @@
 
 			.wz_desc {
 				padding: 10px;
-				background: url(/Default/html/images/signup/container_bg.gif) repeat-x;
+				background-image: linear-gradient(to bottom, #F0F0F0 0%, #FFFFFF 40%);
 			}
 
 			.wz_path {
@@ -62,7 +62,7 @@
 			#loading-mask {
 				width: 120%;
 				height: 100%;
-				background-image: url(/Default/html/images/background.png);
+				background: radial-gradient(ellipse farthest-side at bottom, #00918d 0%,#000000 100%);
 				position: absolute;
 				z-index: 20000;
 				left: 0;
@@ -130,35 +130,19 @@
 				width: 400px;
 			}
 
-			.box-tl {
-				background: url(/Default/html/images/signup/form_header.gif) no-repeat 0 0;
-				padding-left: 14px;
+			.box-top {
+				background-image: linear-gradient(to bottom, #FFFFFF 0%, #CCCCCC);
+				border: 1px solid #666666;
+				border-bottom: none;
+				border-radius: 15px 15px 0 0;
+				padding: 15px 14px 1px 25px;
 			}
 			
-			.box-tr {
-				background: url(/Default/html/images/signup/form_header.gif) no-repeat right -61px;
-				padding-right: 14px;
-			}
-			
-			.box-tc {
-				background: url(/Default/html/images/signup/form_header.gif) repeat-x right -122px;
-				padding: 10px 10px 1px;
-				overflow: hidden;
-			}
-			
-			.box-bl {
-				background: url(/Default/html/images/signup/form_footer.gif) no-repeat 0 0;
-				padding-left: 14px;
-			}
-			
-			.box-br {
-				background: url(/Default/html/images/signup/form_footer.gif) no-repeat right -14px;
-				padding-right: 14px;
-			}
-			
-			.box-bc {
-				background: url(/Default/html/images/signup/form_footer.gif) repeat-x right -28px;
-				height: 14px;
+			.box-bottom {
+				background: white;
+				border: 1px solid #666666;
+				border-top: none;
+				border-radius: 0 0 15px 15px;
 			}
 			
 			.box-inner {
@@ -172,6 +156,10 @@
 			.howto li, li.norm {
 				margin: 10px;
 				list-style-type: disc;
+			}
+			
+			.x-panel-body {
+				background-color: transparent;
 			}
 
 			[% IF rtl %]
@@ -221,7 +209,7 @@
 	</head>
 
 	<body class="singlePanel">
-		<img id="background" src="/Default/html/images/background.png" />
+		<div id="background"></div>
 
 		<div id="loading-mask">&#160;</div>
 		<div id="loading">
@@ -274,29 +262,26 @@
 		</script>
 
 		<div id="header">
-			<div id="header_left"></div>
-			<div id="header_content">
-				<span><img src="[% webroot %]html/images/spacer.gif" id="squeezeboxLogo"></span>
-				<span>
-					<form name="languageForm" id="languageForm" method="post" action="[% webroot %][% path %]">
-						<select name="language" id="language">
-		
-							[% FOREACH option = languageoptions.sort %]
-								[% IF !languageoptions.$option.search('\*') %]
-									<option [% IF prefs.language == option %]selected="selected" [% preferredLanguage=1;END %]value="[% option %]">[% languageoptions.$option %]</option>
-								[% END %]
-							[%- END -%]
-		
-							[% IF !preferredLanguage %]
-								<option selected="selected" value="[% prefs.language %]">[% languageoptions.${prefs.language} %]</option>
+			<span><img src="[% webroot %]html/images/spacer.gif" id="squeezeboxLogo"></span>
+			<span>
+				<form name="languageForm" id="languageForm" method="post" action="[% webroot %][% path %]">
+					<select name="language" id="language">
+	
+						[% FOREACH option = languageoptions.sort %]
+							[% IF !languageoptions.$option.search('\*') %]
+								<option [% IF prefs.language == option %]selected="selected" [% preferredLanguage=1;END %]value="[% option %]">[% languageoptions.$option %]</option>
 							[% END %]
-		
-						</select>
-						<input name="saveLanguage" type="hidden" value="1">
-					</form>
-					<a href="http://www.logitech.com" target="_blank"><img src="[% webroot %]html/images/spacer.gif" id="logitechLogo"></a>
-				</span>
-			</div>
+						[%- END -%]
+	
+						[% IF !preferredLanguage %]
+							<option selected="selected" value="[% prefs.language %]">[% languageoptions.${prefs.language} %]</option>
+						[% END %]
+	
+					</select>
+					<input name="saveLanguage" type="hidden" value="1">
+				</form>
+				<a href="http://www.logitech.com" target="_blank"><img src="[% webroot %]html/images/spacer.gif" id="logitechLogo"></a>
+			</span>
 		</div>
 
 		<div id="inner_header">
@@ -323,9 +308,6 @@
 		</div>
 
 		<div id="footer">
-			<div id="footer_left"></div>
-			<div id="footer_content">
-			</div>
 		</div>
 
 		<!-- the wizard's tabs: make them all use the same class, which is iterated by the JS -->
@@ -340,12 +322,8 @@
 				
 					<div class="centeredbox">
 						<div class="box">
-							<div class="box-tl">
-								<div class="box-tr">
-									<div class="box-tc">
-										<h1>[% "LOGIN" | string %]</h1>
-									</div>
-								</div>
+							<div class="box-top">
+								<h1>[% "LOGIN" | string %]</h1>
 							</div>
 					
 							<div class="box-inner">	
@@ -378,12 +356,8 @@
 							</div>
 					
 					
-							<div class="box-bl">
-								<div class="box-br">
-									<div class="box-bc">
-										&nbsp;
-									</div>
-								</div>
+							<div class="box-bottom">
+								&nbsp;
 							</div>
 	
 							<div><p style="padding: 20px;"><a href="http://[% sn_server %]/" target="SQN">[% "SETUP_SN_NEED_ACCOUNT" | string%]</a></p></div>
@@ -431,12 +405,8 @@
 				<div class="wz_desc">
 				
 					<div class="box leftbox">
-						<div class="box-tl">
-							<div class="box-tr">
-								<div class="box-tc">
-									<h1>[% "SIGNUP_LISTEN" | string %]</h1>
-								</div>
-							</div>
+						<div class="box-top">
+							<h1>[% "SIGNUP_LISTEN" | string %]</h1>
 						</div>
 				
 						<div class="box-inner">
@@ -468,12 +438,8 @@
 							</ul>
 						</div>
 				
-						<div class="box-bl">
-							<div class="box-br">
-								<div class="box-bc">
-									&nbsp;
-								</div>
-							</div>
+						<div class="box-bottom">
+							&nbsp;
 						</div>
 					</div>
 				
@@ -493,24 +459,16 @@
 				
 						<div style="height: 30px">&nbsp;</div>
 				
-						<div class="box-tl">
-							<div class="box-tr">
-								<div class="box-tc">
-									<h1>[% "WHATS_NEXT" | string %]</h1>
-								</div>
-							</div>
+						<div class="box-top">
+							<h1>[% "WHATS_NEXT" | string %]</h1>
 						</div>
 				
 						<div class="box-inner">
 							<p>[% "CONTINUE_TO_SQUEEZEBOX_SERVER" | string %]<br/>&nbsp;</p>
 						</div>
 				
-						<div class="box-bl">
-							<div class="box-br">
-								<div class="box-bc">
-									&nbsp;
-								</div>
-							</div>
+						<div class="box-bottom">
+							&nbsp;
 						</div>
 						
 					</div>

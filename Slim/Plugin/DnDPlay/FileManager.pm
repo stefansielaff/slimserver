@@ -28,11 +28,16 @@ sub init {
 }
 
 sub getFileUrl {
-	my ($class, $header, $dataRef, $file) = @_;
+	my ($class, $file) = @_;
 	
-	my $filename = _cachedFileName($file);
-			
-	File::Slurp::write_file($filename, {binmode => ':raw'}, $dataRef);
+	my $filename = $class->cachedFileName($file);
+	
+	if ( !$filename ) {
+		unlink $file->{tempfile};
+		return;
+	}
+	
+	rename $file->{tempfile}, $filename;
 
 	my $url = Slim::Utils::Misc::fileURLFromPath($filename);
 	
@@ -46,7 +51,7 @@ sub getFileUrl {
 		$url =~ s/^file/tmp/;
 	}
 	
-	main::DEBUGLOG && $log->is_debug && $log->debug("Received audio file: $filename; stored as $url");
+	main::DEBUGLOG && $log->is_debug && $log->debug("Received audio file: $file->{name}; stored as $url");
 
 	Slim::Utils::Timers::killTimers(0, \&_cleanup);
 	Slim::Utils::Timers::setTimer(0, time() + CLEANUP_INTERVAL, \&_cleanup);
@@ -54,8 +59,18 @@ sub getFileUrl {
 	return $url;
 }
 
-sub _cachedFileName {
-	my $file = shift;
+sub cachedFileName {
+	my ($class, $file) = @_;
+
+	return unless $file && $file->{name} && $file->{size} && $file->{timestamp};
+	
+	my ($key, $ext) = $class->cacheKey($file);
+
+	return catfile($uploadFolder, "$key.$ext");
+}
+
+sub cacheKey {
+	my ($class, $file) = @_;
 
 	return unless $file && $file->{name} && $file->{size} && $file->{timestamp};
 
@@ -64,17 +79,17 @@ sub _cachedFileName {
 	my ($ext) = $file->{name} =~ /\.(\w+)$/;
 	$ext    ||= Slim::Music::Info::mimeToType($file->{type});
 	
-	my $key = md5_hex(join('::', $name, $file->{size}, $file->{timestamp}));
+	my $key = $file->{key} || md5_hex(join('::', $name, $file->{size}, $file->{timestamp}));
 	
-	return catfile($uploadFolder, "$key.$ext");
+	return wantarray ? ($key, $ext) : $key;
 }
 
-sub getCachedFileUrl {
+sub getCachedOrLocalFileUrl {
 	my ($class, $file) = @_;
 	
 	return unless $file && $file->{name} && $file->{size} && $file->{timestamp};
 	
-	my $filename = _cachedFileName($file);
+	my $filename = $class->cachedFileName($file);
 
 	if ( -f $filename ) {
 		my $url = Slim::Utils::Misc::fileURLFromPath($filename);
@@ -89,17 +104,19 @@ sub getCachedFileUrl {
 	
 	# Filename encoding can be a pita - let's use a regex to work around it.
 	# Filesize and timestamp are pretty unique, indexed and will provide for fast results anyway.
-	my $sth = $dbh->prepare_cached( 'SELECT url FROM tracks WHERE filesize = ? AND timestamp = ? AND url REGEXP ? LIMIT 1' );
+	my $sth = $dbh->prepare_cached( 'SELECT id FROM tracks WHERE filesize = ? AND timestamp = ? AND url REGEXP ? LIMIT 1' );
 
 	# build regex based on URI escaped values
 	my $filename = URI::Escape::uri_escape_utf8($file->{name});
+	$filename =~ s/[\(\)'\^\$\[\]\+\*]/.*/g;
 	$filename =~ s/(%[a-f\d]{2})+/.*/ig;
 	
 	$sth->execute( $file->{size}, $file->{timestamp}, $filename );
 	
 	my $results = $sth->fetchall_arrayref({});
 
-	if ( $results && ref $results && (my $url = $results->[0]->{url}) ) {
+	if ( $results && ref $results && (my $id = $results->[0]->{id}) ) {
+		my $url = "db:track.id=$id";
 		main::DEBUGLOG && $log->is_debug && $log->debug("Found indexed file $url for " . Data::Dump::dump($file) );
 		return $url;
 	}
@@ -142,5 +159,7 @@ sub _cleanup {
 
 	main::DEBUGLOG && $log->is_debug && $log->debug("Upload folder cleanup done!");
 }
+
+sub uploadFolder { $uploadFolder }
 
 1;

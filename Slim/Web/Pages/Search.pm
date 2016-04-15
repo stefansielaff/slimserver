@@ -241,6 +241,17 @@ sub advancedSearch {
 			$params->{$key} = { 'like' => Slim::Utils::Text::searchStringSplit($params->{$key}) };
 		}
 
+		if ($newKey =~ /url/) {
+			my $uri = URI::Escape::uri_escape_utf8($params->{$key});
+			
+			# don't escape backslashes
+			$uri =~ s$%(?:2F|5C)$/$ig;
+			# replace the % in the URI escaped string with a single character placeholder
+			$uri =~ s/%/_/g;
+
+			$params->{$key} = { 'like' => "%$uri%" };
+		}
+
 		$query{$newKey} = $params->{$key};
 	}
 	
@@ -260,9 +271,13 @@ sub advancedSearch {
 	
 	# get available samplerates
 	if ( !($params->{'samplerates'} = $cache->get($prefix . 'samplerateList')) ) {
-		$params->{samplerates} = $dbh->selectcol_arrayref('SELECT DISTINCT samplerate FROM tracks WHERE samplerate > 0');
-
+		$params->{'samplerates'} = $dbh->selectcol_arrayref('SELECT DISTINCT samplerate FROM tracks WHERE samplerate > 0');
 		$cache->set($prefix . 'samplerateList', $params->{'samplerates'}, 86400 * 7) if scalar @{$params->{'samplerates'}};
+	}
+	
+	if ( !($params->{'samplesizes'} = $cache->get($prefix . 'samplesizeList')) ) {
+		$params->{'samplesizes'} = $dbh->selectcol_arrayref('SELECT DISTINCT samplesize FROM tracks WHERE samplesize > 0');
+		$cache->set($prefix . 'samplesizeList', $params->{'samplesizes'}, 86400 * 7) if scalar @{$params->{'samplesizes'}};
 	}
 	
 	# load up the genres we know about.

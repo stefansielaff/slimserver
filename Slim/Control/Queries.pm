@@ -60,7 +60,7 @@ my $prefs = preferences('server');
 my $cache = {};
 
 # small, short lived cache of folder entries to prevent repeated disk reads on BMF
-tie my %bmfCache, 'Tie::Cache::LRU::Expires', EXPIRES => 15, ENTRIES => 5;
+tie my %bmfCache, 'Tie::Cache::LRU::Expires', EXPIRES => 60, ENTRIES => $prefs->get('dbhighmem') ? 1024 : 5;
 
 sub init {
 	my $class = shift;
@@ -1029,6 +1029,10 @@ sub artistsQuery {
 		my $total_sth = $dbh->prepare_cached( qq{
 			SELECT COUNT(1) FROM ( $sql ) AS t1
 		} );
+				
+		if ( main::DEBUGLOG && $sqllog->is_debug ) {
+			$sqllog->debug( "Artists totals query: $sql / " . Data::Dump::dump($p) );
+		}
 		
 		$total_sth->execute( @{$p} );
 		($count) = $total_sth->fetchrow_array();
@@ -1904,12 +1908,24 @@ sub mediafolderQuery {
 	} @{ Slim::Utils::Misc::getInactiveMediaDirs() } if !$type || $type eq 'audio';
 	
 	my ($topLevelObj, $items, $count, $topPath, $realName);
+	
+	my $bmfUrlForName = $cache->{bmfUrlForName} || {};
+	
+	my $highmem = $prefs->get('dbhighmem');
 				
 	my $filter = sub {
 		# if a $sth is passed, we'll do a quick lookup to check existence only, not returning an actual object if possible
 		my ($filename, $topPath, $sth) = @_;
-		
-		my $url = Slim::Utils::Misc::fixPath($filename, $topPath) || '';
+
+		my $url = $bmfUrlForName->{$filename . $topPath};
+		if (!$url) {
+			$url ||= Slim::Utils::Misc::fixPath($filename, $topPath) || '';
+			
+			# keep a cache of the mapping in memory if we can afford it
+			if ($highmem && $url) {
+				$bmfUrlForName->{$filename . $topPath} ||= $url;
+			}
+		}
 
 		# Amazingly, this just works. :)
 		# Do the cheap compare for osName first - so non-windows users
@@ -1938,13 +1954,19 @@ sub mediafolderQuery {
 		
 		$url =~ s/^file/tmp/ if $volatileUrl;
 
-		my $item = Slim::Schema->objectForUrl({
+		# if we have dbhighmem configured, use a memory cache to prevent slow lookups
+		my $item = $bmfCache{$url} || Slim::Schema->objectForUrl({
 			'url'      => $url,
 			'create'   => 1,
 			'readTags' => 1,
+			'playlist' => Slim::Music::Info::isPlaylist($url),
 		}) if $url;
 
 		if ( (blessed($item) && $item->can('content_type')) || ($params->{typeRegEx} && $filename =~ $params->{typeRegEx}) ) {
+
+			if ($highmem) {
+				$bmfCache{$url} = $item;
+			}
 
 			# when dealing with a volatile file, read tags, as above objectForUrl() would not scan remote files
 			if ( $volatileUrl ) {
@@ -2047,7 +2069,7 @@ sub mediafolderQuery {
 				items       => $items,
 				topLevelObj => $topLevelObj,
 				count       => $count,
-			} if scalar @$items > 100 && ($params->{url} || $params->{id});
+			} if scalar @$items > 10 && ($params->{url} || $params->{id});
 		}
 
 		if ($want_top) {
@@ -2180,6 +2202,15 @@ sub mediafolderQuery {
 		# the caches would get out of sync
 		Slim::Schema->wipeCaches;
 		Slim::Music::Import->setLastScanTime();
+	}
+	
+	if ( $highmem ) {
+		# don't grow infinitely - reset after 512 entries
+		if ( scalar keys %$bmfUrlForName > 512 ) {
+			$bmfUrlForName = {};
+		}
+		
+		$cache->{bmfUrlForName} = $bmfUrlForName;
 	}
 	
 	$request->setStatusDone();

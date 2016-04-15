@@ -156,7 +156,7 @@ sub shutdown {
 	}
 	%SOCKS = ();
 	
-	$log->info('UPnP Discovery shutdown');
+	main::INFOLOG && $log->is_info && $log->info('UPnP Discovery shutdown');
 }
 
 sub server { $SERVER }
@@ -167,7 +167,7 @@ sub _read {
 	my $addr = recv $sock, my $ssdp, 1024, 0;
 
 	if ( !defined $addr ) {
-		$log->is_debug && $log->debug("Read search result failed: $!");
+		main::DEBUGLOG && $log->is_debug && $log->debug("Read search result failed: $!");
 		return;
 	}
 	
@@ -484,7 +484,7 @@ sub _advertise {
 					last;
 				}
 			}
-			if ( !$local_addr ) {
+			if ( !$local_addr || $local_addr eq '0.0.0.0' ) {
 				$local_addr = Slim::Utils::Network::serverAddr(); # default
 			}
 			

@@ -28,8 +28,11 @@ use constant PENDING_CHANGED => 0x04;
 # If more than this many items are changed during a scan, the database is optimized
 use constant OPTIMIZE_THRESHOLD => 100;
 
-# Number of items to process at once, this value will affect the max size of the WAL file
-use constant CHUNK_SIZE => 50;
+use constant IS_SQLITE => (Slim::Utils::OSDetect->getOS()->sqlHelperClass() =~ /SQLite/ ? 1 : 0);
+
+# Number of items to process at once, this value will affect the max size of the WAL file.
+# Chunking is only required with SQLite, as we don't have this kind of concurrency problem with MySQL.
+use constant CHUNK_SIZE => IS_SQLITE ? 50 : 1000;
 
 my $log   = logger('scan.scanner');
 my $prefs = preferences('server');
@@ -181,6 +184,7 @@ sub rescan {
 	# if we should optimize the database or not, and also so we know if
 	# we need to udpate lastRescanTime
 	my $changes = 0;
+	my $ctFilter = $args->{types} eq 'list' ? "== 'ssp'" : "!= 'dir'";
 	
 	# Get list of files within this path
 	Slim::Utils::Scanner::Local->find( $next, $args, sub {
@@ -216,8 +220,8 @@ sub rescan {
 			)
 			AND             url LIKE '$basedir%'
 			AND             virtual IS NULL
-			AND             content_type != 'dir'
-		};
+			AND             content_type $ctFilter
+		} . (IS_SQLITE ? '' : ' ORDER BY url');
 		
 		$log->error("Delete temporary table if exists") unless main::SCANNER && $main::progress;
 		# 2. Files that are new and not in the database.
@@ -238,7 +242,7 @@ sub rescan {
 		my $onDiskOnlySQL = qq{
 			SELECT          url
 			FROM            diskonly
-		};
+		} . (IS_SQLITE ? '' : ' ORDER BY url');
 		
 		# 3. Files that have changed mtime or size.
 		# XXX can this query be optimized more?
@@ -252,10 +256,10 @@ sub rescan {
 					OR
 					scanned_files.filesize != tracks.filesize
 				)
-				AND tracks.content_type != 'dir'
+				AND tracks.content_type $ctFilter
 			)
 			WHERE scanned_files.url LIKE '$basedir%'
-		};
+		} . (IS_SQLITE ? '' : ' ORDER BY scanned_files.url');
 
 		# bug 18078 - Windows doesn't handle DST changes in a file's timestamp correctly. We need to do this on our end.
 		if ( main::ISWINDOWS && !(main::SCANNER && $main::wipe) ) {
@@ -276,7 +280,7 @@ sub rescan {
 		my $inDBOnlyCount = 0;
 		($inDBOnlyCount) = $dbh->selectrow_array( qq{
 			SELECT COUNT(*) FROM ( $inDBOnlySQL ) AS t1
-		} ) if !(main::SCANNER && $main::wipe) && $args->{types} =~ /audio/;
+		} ) if !(main::SCANNER && $main::wipe) && $args->{types} =~ /audio|list/;
     	
 		$log->error("Get new tracks count") unless main::SCANNER && $main::progress;
 		my ($onDiskOnlyCount) = $dbh->selectrow_array( qq{
@@ -606,7 +610,7 @@ sub deleted {
 	my $content_type = _content_type($url);
 	
 	if ( Slim::Music::Info::isSong($url, $content_type) ) {
-		$log->error("Handling deleted audio file $url") unless main::SCANNER && $main::progress;
+		$log->warn("Handling deleted audio file $url") unless main::SCANNER && $main::progress;
 
 		# XXX no DBIC objects
 		my $track = Slim::Schema->rs('Track')->search( url => $url )->single;

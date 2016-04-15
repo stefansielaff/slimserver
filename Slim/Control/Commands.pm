@@ -1353,6 +1353,8 @@ sub playlistXitemCommand {
 		return;
 	}
 
+	$title = Slim::Utils::Unicode::utf8decode($title) if $title;
+
 	main::INFOLOG && $log->info("cmd: $cmd, item: $item, title: $title, fadeIn: ", ($fadeIn ? $fadeIn : 'undef'));
 
 	my $jumpToIndex = $request->getParam('play_index'); # This should be undef (by default) - see bug 2085
@@ -1392,14 +1394,26 @@ sub playlistXitemCommand {
 	# But not for or local file:// URLs,  and this may mean 
 	# rescanning items already in the database but still allows playlist and other favorites to be played
 	
-	# XXX: hardcoding these protocols isn't the best way to do this. We should have a flag in ProtocolHandler to get this list
+	# hardcoding these protocols isn't the best way to do this. We should be using the protocol handler's explodePlaylist call.
 	if ($path =~ /^db:|^itunesplaylist:|^musicipplaylist:/) {
-
 		if (my @tracks = _playlistXtracksCommand_parseDbItem($client, $path)) {
 			$client->execute(['playlist', $cmd . 'tracks' , 'listRef', \@tracks, $fadeIn]);
 			$request->setStatusDone();
 			return;
 		}
+	}
+
+	# if we have a single item, we might need to expand it to some list (eg. Spotify Album -> track list)
+	my $handler = Slim::Player::ProtocolHandlers->handlerForURL($path) unless $list;
+
+	if ( $handler && $handler->can('explodePlaylist') ) {
+		$handler->explodePlaylist($client, $path, sub {
+			my $tracks = shift;
+			$client->execute(['playlist', $cmd . 'tracks' , 'listRef', $tracks, $fadeIn]);
+			$request->setStatusDone();
+		});
+
+		return;
 	}
 
 	# correct the path

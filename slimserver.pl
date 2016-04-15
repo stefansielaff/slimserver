@@ -381,7 +381,7 @@ sub init {
 
 	my $log = logger('server');
 
-	$log->error("Starting Logitech Media Server (v$VERSION, $REVISION, $BUILDDATE) perl $]");
+	$log->error("Starting Logitech Media Server (v$VERSION, $REVISION, $BUILDDATE) perl $] - " . $main::Config{archname});
 
 	if ($diag) { 
 		eval "use diagnostics";
@@ -595,9 +595,6 @@ sub init {
 
 	main::INFOLOG && $log->info("Server Jive init...");
 	Slim::Control::Jive->init();
-	
-	main::INFOLOG && $log->info("Remote Metadata init...");
-	Slim::Formats::RemoteMetadata->init();
 	
 	# Reinitialize logging, as plugins may have been added.
 	if (Slim::Utils::Log->needsReInit) {

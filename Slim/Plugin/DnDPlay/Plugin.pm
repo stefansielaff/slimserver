@@ -7,12 +7,14 @@ package Slim::Plugin::DnDPlay::Plugin;
 
 use strict;
 
+use File::Temp qw(tempfile);
 use JSON::XS::VersionOneAndTwo;
 
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
+use Slim::Utils::Strings qw(string cstring);
 
-use constant MAX_UPLOAD_SIZE => 100_000_000;
+use Slim::Plugin::DnDPlay::FileManager;
 
 my $log = Slim::Utils::Log->addLogCategory({
 	'category'     => 'plugin.dndplay',
@@ -20,37 +22,150 @@ my $log = Slim::Utils::Log->addLogCategory({
 	'description'  => 'PLUGIN_DNDPLAY',
 });
 
+my $prefs = preferences('plugin.dndplay');
+
+sub MAX_UPLOAD_SIZE {
+	return $prefs->get('maxfilesize') * 1024 * 1024;
+}
+
 my $CRLF = $Socket::CRLF;
 
 my $cacheFolder;
 
-sub initPlugin { if (main::WEBUI) {
+sub initPlugin {
 	my $class = shift;
-	
-	require Slim::Plugin::DnDPlay::FileManager;
-	Slim::Plugin::DnDPlay::FileManager->init();
 
-	# this handler hijacks the default handler for js-main, to inject the D'n'd code
-	Slim::Web::Pages->addPageFunction("js-main\.html", sub {
-		Slim::Web::HTTP::filltemplatefile('html/js-main-dd.html', $_[1]);
+	$prefs->init({
+		maxfilesize => 100,
 	});
 	
-	Slim::Web::Pages->addRawFunction("plugin/dndplay/checkfiles", \&handleFilesCheck);
-	Slim::Web::Pages->addRawFunction("plugin/dndplay/upload", \&handleUpload);
-} }
+	if (main::WEBUI) {
+		require Slim::Plugin::DnDPlay::Settings;
+		Slim::Plugin::DnDPlay::Settings->new();
+		
+		# this handler hijacks the default handler for js-main, to inject the D'n'd code
+		Slim::Web::Pages->addPageFunction("js-main\.html", sub {
+			my $params = $_[1];
+			$params->{maxUploadSize} = MAX_UPLOAD_SIZE;
+			$params->{fileTooLarge}  = string('PLUGIN_DNDPLAY_FILE_TOO_LARGE', '{0}', '{1}');
+			$params->{validTypeExtensions} = '\.(' . join('|', Slim::Music::Info::validTypeExtensions()) . ')$';
+			Slim::Web::HTTP::filltemplatefile('html/js-main-dd.html', $params);
+		});
+	} 
+	
+	# the file upload is handled through a custom request handler, dealing with multi-part POST requests
+	Slim::Web::Pages->addRawFunction("plugins/dndplay/upload", \&handleUpload);
+	
+    Slim::Control::Request::addDispatch(['playlist', 'playmatch'], [1, 1, 1, \&cliPlayMatch]);
+    Slim::Control::Request::addDispatch(['playlist', 'addmatch'], [1, 1, 1, \&cliPlayMatch]);
+}
 
-sub _webHandler { if (main::WEBUI) {
+# don't run the cleanup before all protocol handlers from plugins are initialized
+sub postinitPlugin {
+	Slim::Plugin::DnDPlay::FileManager->init();
+}
+
+sub handleUpload {
 	my ($httpClient, $response, $func) = @_;
 	
 	my $request = $response->request;
-	my $result;
+	my $result = {};
+	
+	my $t = Time::HiRes::time();
 	
 	if ( my $client = _getClient($request) ) {
-		$result = $func->($client, $request);
+		if ( $request->content_length > MAX_UPLOAD_SIZE ) {
+			$result = {
+				error => sprintf(cstring($client, 'PLUGIN_DNDPLAY_FILE_TOO_LARGE'), formatMB($request->content_length), formatMB(MAX_UPLOAD_SIZE)),
+				code  => 413,
+			};
+		}
+		else {
+			my $ct = $request->header('Content-Type');
+			my ($boundary) = $ct =~ /boundary=(.*)/;
+			
+			my %info;
+			my ($k, $v, $fh);
+
+			# open a pseudo-filehandle to the uploaded data ref for further processing
+			open TEMP, '<', $request->content_ref;
+			
+			while (<TEMP>) {
+				if ( Time::HiRes::time - $t > 0.1 ) {
+					main::idleStreams();
+					$t = Time::HiRes::time();
+				}
+				
+				# a new part starts - reset some variables
+				if ( /--\Q$boundary\E/i ) {
+					$k = $v = '';
+					
+					# remove potential superfluous cr/lf from the end of the file, then close it
+					if ($fh) {
+						truncate $fh, $info{size} if $info{size};
+						close $fh;
+					}
+				}
+				
+				# write data to file handle
+				elsif ( $fh ) {
+					print $fh $_;
+				}
+				
+				# we got an uploaded file
+				elsif ( !$k && /filename="(.+?)"/i ) {
+					$k = 'upload';
+				}
+				
+				# we got the separator after the upload file name: file data comes next. Open a file handle to write the data to.
+				elsif ( $k && $k eq 'upload' && /^\s*$/ ) {
+					($fh, $info{tempfile}) = tempfile('tmp-XXXX',
+						DIR => Slim::Plugin::DnDPlay::FileManager->uploadFolder(),
+						UNLINK => 0
+					);
+				}
+				
+				# we received some variable name
+				elsif ( /\bname="(.+?)"/i ) {
+					$k = $1;
+				}
+				
+				# an uploaded variable's content
+				elsif ( $k && $k ne 'upload' && $_ ) {
+					s/$CRLF*$//s;
+					$info{$k} = $_ if $_;
+				}
+			}
+			
+			main::DEBUGLOG && $log->is_debug && $log->debug("Uploaded file information found: " . Data::Dump::dump(%info));
+			
+			close TEMP;
+
+			if ( !$info{name} ) {
+				$result->{error} = string('PLUGIN_DNDPLAY_INVALID_DATA');
+				$result->{code} = 500;
+			}
+			elsif ( my $url = Slim::Plugin::DnDPlay::FileManager->getFileUrl(\%info) ) {
+				$result->{url} = $url;
+				
+				if ($info{action}) {
+					$client->execute(['playlist', $info{action}, $url]);
+				}
+				delete $result->{code};
+			}
+			else {
+				$result->{error} = cstring($client, 'PROBLEM_UNKNOWN_TYPE');
+				$result->{code} = 415;
+			}
+			
+			if ( $result->{error} && $info{tempfile} && -f $info{tempfile} ) {
+				unlink $info{tempfile};
+			}
+		}
 	}
 	else {
 		$result = {
-			error => 'No player defined',
+			error => string('PLUGIN_DNDPLAY_NO_PLAYER_CONNECTED'),
 			code  => 500,
 		};
 	}
@@ -64,96 +179,49 @@ sub _webHandler { if (main::WEBUI) {
 	$response->content_type('application/json');
 	
 	Slim::Web::HTTP::addHTTPResponse( $httpClient, $response, \$content	);
-} }
+}
 
-sub handleFilesCheck { if (main::WEBUI) {
-	return _webHandler($_[0], $_[1], sub {
-		my ($client, $request) = @_;
-		my $result = {};
-		
-		my $content = eval {
-			from_json($request->content())
-		};
-		
-		if ( $@ || !$content ) {
-			$result = {
-				error => "Failed to get request body data: " . ($@ || 'no data'),
-				code  => 500,
-			};
-		}
-		elsif ( ref $content && ref $content eq 'ARRAY' ) {
-			my @actions;
-			my $action = Slim::Player::Playlist::count($client) ? 'add' : 'play';
-			foreach my $file ( @$content ) {
-				if ( my $url = Slim::Plugin::DnDPlay::FileManager->getCachedFileUrl($file) ) {
-					push @actions, "['playlist', '$action', '$url']";
-					$action = 'add';
-				}
-				else {
-					push @actions, 'upload'
-				}
-			}
-			
-			$result->{actions} = \@actions;
-		}
-		else {
-			$result = {
-				error => "Invalid data, Array of file descriptions expected " . (main::DEBUGLOG && Data::Dump::dump($content)),
-				code  => 500
-			};
-		}
-		
-		return $result;
-	});
-} }
+sub formatMB {
+	return Slim::Utils::Misc::delimitThousands(int($_[0] / 1024 / 1024)) . 'MB';
+}
 
-sub handleUpload { if (main::WEBUI) {
-	return _webHandler($_[0], $_[1], sub {
-		my ($client, $request) = @_;
-		my $result = {};
-
-		if ( $request->content_length > MAX_UPLOAD_SIZE ) {
-			$result = {
-				error => sprintf("File size (%s) exceeds maximum upload size (%s)", $request->content_length, MAX_UPLOAD_SIZE),
-				code  => 413,
-			};
-		}
-		else {
-			my $ct = $request->header('Content-Type');
-			my ($boundary) = $ct =~ /boundary=(.*)/;
-			
-			my $content = $request->content_ref;
-			my %info;
+sub cliPlayMatch {
+	my $request = shift;
 	
-			foreach my $data (split /--\Q$boundary\E/, $$content) {
-				if ( $data =~ s/(.+?)${CRLF}${CRLF}//s ) {
-					my $header = $1;
-					$data =~ s/$CRLF*$//s;
+	my $client = $request->client;
+	
+	my $file = {
+		name => $request->getParam('name'),
+		timestamp => $request->getParam('timestamp'),
+		size => $request->getParam('size'),
+		type => $request->getParam('type'),
+	};
 
-					main::DEBUGLOG && $log->is_debug && $log->debug("New section header found: " . Data::Dump::dump($header));
-					
-					# uploaded file
-					if ( $header =~ /filename=".+?"/si ) {
-						if ( my $url = Slim::Plugin::DnDPlay::FileManager->getFileUrl($header, \$data, \%info) ) {
-							$result->{action} = "['playlist', '". (Slim::Player::Playlist::count($client) ? 'add' : 'play') . "', '$url']";
-							delete $result->{code};
-						}
-						else {
-							$result->{code} = 415; # unsupported media type
-						}
-					}
-					elsif ( $header =~ /name="(.+?)"/si ) {
-						$info{$1} = $data;
-					}
-				}
-			}
-			
-			main::DEBUGLOG && $log->is_debug && $log->debug("Found additional file information: " . Data::Dump::dump(%info));
-		}
-		
-		return $result;
-	});
-} }
+	if ($request->isNotQuery([['playlist'], ['addmatch', 'playmatch']]) || !($file->{name} && $file->{timestamp} && defined $file->{size})) {
+		$log->error('Missing file information.');
+		$request->setStatusBadDispatch();
+		return;
+	}
+	
+	my $action = $request->isQuery([['playlist'], ['playmatch']]) ? 'play' : 'add';
+
+	# if we have a cached or local file, we can play it
+	if ( my $url = Slim::Plugin::DnDPlay::FileManager->getCachedOrLocalFileUrl($file) ) {
+		$client->execute(['playlist', $action, $url]);
+		$request->addResult('success', $action);
+	}
+	# we should upload, but file is too large
+	elsif ( $file->{size} > MAX_UPLOAD_SIZE ) {
+		$request->addResult( 'error', sprintf(cstring($client, 'PLUGIN_DNDPLAY_FILE_TOO_LARGE'), formatMB($file->{size}), formatMB(MAX_UPLOAD_SIZE)) );
+		$request->addResult( 'maxUploadSize', MAX_UPLOAD_SIZE );
+	}
+	else {
+		my $key = Slim::Plugin::DnDPlay::FileManager->cacheKey($file);
+		$request->addResult('upload', $key);
+	}
+
+	$request->setStatusDone();
+}
 
 sub _getClient {
 	my $request = shift;
