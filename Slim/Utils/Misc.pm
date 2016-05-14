@@ -1110,9 +1110,18 @@ sub parseRevision {
 	my $tempBuildInfo = eval { File::Slurp::read_file(
 		catdir(Slim::Utils::OSDetect::dirsFor('revision'), 'revision.txt')
 	) } || "TRUNK\nUNKNOWN";
+	
+	my ($revision, $builddate) = split (/\n/, $tempBuildInfo);
+	
+	# if we're running from a git clone, report the last commit ID and timestamp
+	# "git -C ..." is only available in recent git version, more recent than what CentOS provides...
+	if ( $revision eq 'TRUNK' && `cd $Bin && git show -s --format=%h\\|%ci 2> /dev/null` =~ /^([0-9a-f]+)\|(\d{4}-\d\d-\d\d.*)/i ) {
+		$revision = 'git-' . $1;
+		$builddate = $2;
+	}
 
 	# Once we've read the file, split it up so we have the Revision and Build Date
-	return split (/\n/, $tempBuildInfo);
+	return ($revision, $builddate);
 }
 
 =head2 userAgentString( )
