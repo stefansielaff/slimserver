@@ -6,7 +6,7 @@ package Slim::Plugin::RandomPlay::Plugin;
 
 # This code is derived from code with the following copyright message:
 #
-# Logitech Media Server Copyright 2005-2011 Logitech.
+# Logitech Media Server Copyright 2005-2016 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -331,6 +331,77 @@ sub initPlugin {
 	);
 	
 	$cache = Slim::Utils::Cache->new();
+}
+
+sub postinitPlugin {
+	my $class = shift;
+	
+	# if user has the Don't Stop The Music plugin enabled, register ourselves
+	if ( Slim::Utils::PluginManager->isEnabled('Slim::Plugin::DontStopTheMusic::Plugin') ) {
+		require Slim::Plugin::DontStopTheMusic::Plugin;
+		
+		my $mixWithGenres = sub {
+			my ($type, $client, $cb) = @_;
+		
+			return unless $client;
+		
+			my %genres;
+			foreach my $track (@{ Slim::Player::Playlist::playList($client) }) {
+				if ( $track->remote ) {
+					$genres{$track->genre}++ if $track->genre;
+				}
+				else {
+					foreach ( $track->genres ) {
+						$genres{$_->name}++
+					}
+				}
+			}
+			
+			# don't seed from radio stations - only do if we're playing from some track based source
+			if (keys %genres) {
+				# reset all genres to only use those present in our queue
+				$client->execute(['randomplaygenreselectall', 0]);
+				
+				foreach (keys %genres) {
+					$client->execute(['randomplaychoosegenre', $_, 1]);
+				}
+			}
+		
+			$cb->($client, ['randomplay://' . $type]);
+		};
+		
+		Slim::Plugin::DontStopTheMusic::Plugin->registerHandler('PLUGIN_RANDOM_TITLEMIX_WITH_GENRES', sub {
+			$mixWithGenres->('track', @_);
+		});
+
+		Slim::Plugin::DontStopTheMusic::Plugin->registerHandler('PLUGIN_RANDOM_TRACK', sub {
+			my ($client, $cb) = @_;
+			$client->execute(['randomplaygenreselectall', 0]);
+			$cb->($client, ['randomplay://track']);
+		});
+		
+		Slim::Plugin::DontStopTheMusic::Plugin->registerHandler('PLUGIN_RANDOM_ALBUM_MIX_WITH_GENRES', sub {
+			$mixWithGenres->('album', @_);
+		});
+
+		Slim::Plugin::DontStopTheMusic::Plugin->registerHandler('PLUGIN_RANDOM_ALBUM_ITEM', sub {
+			my ($client, $cb) = @_;
+			$client->execute(['randomplaygenreselectall', 0]);
+			$cb->($client, ['randomplay://album']);
+		});
+
+		Slim::Plugin::DontStopTheMusic::Plugin->registerHandler('PLUGIN_RANDOM_CONTRIBUTOR_ITEM', sub {
+			my ($client, $cb) = @_;
+			$client->execute(['randomplaygenreselectall', 0]);
+			$cb->($client, ['randomplay://contributor']);
+		});
+
+		Slim::Plugin::DontStopTheMusic::Plugin->registerHandler('PLUGIN_RANDOM_YEAR_ITEM', sub {
+			my ($client, $cb) = @_;
+			$client->execute(['randomplaygenreselectall', 0]);
+			$cb->($client, ['randomplay://year']);
+		});
+	}
 }
 
 sub _shutdown {
