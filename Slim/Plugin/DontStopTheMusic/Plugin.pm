@@ -11,6 +11,7 @@ package Slim::Plugin::DontStopTheMusic::Plugin;
 # GNU General Public License for more details.
 
 use strict;
+use Scalar::Util qw(blessed);
 
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
@@ -72,11 +73,6 @@ sub initPlugin {
 
 	# listen to playlist change events so we know when our own playlist ends
 	Slim::Control::Request::subscribe(\&onPlaylistChange, [['playlist'], ['cant_open', 'newsong', 'delete', 'resume']]);
-	Slim::Control::Request::subscribe(\&registerFavorites, [['favorites'], ['changed']]);
-}
-
-sub postinitPlugin {
-	registerFavorites();
 }
 
 sub registerHandler {
@@ -84,14 +80,34 @@ sub registerHandler {
 	$handlers{$id} = $handler;
 }
 
+sub unregisterHandler {
+	my ($class, $id) = @_;
+	delete $handlers{$id};
+}
+
 sub getHandler {
 	my ($class, $client) = @_;
+	
 	return unless $client;
+	
+	$client = $client->master;
 	return $handlers{$prefs->client($client)->get('provider')};
 }
 
-sub getHandlers {
-	return \%handlers;
+sub getSortedHandlerTokens {
+	my $client = shift;
+	
+	return unless $client;
+	
+	$client = $client->master;
+	
+	my @handlerStrings = sort {
+		Slim::Utils::Unicode::utf8toLatin1Transliterate(getString($a, $client)) 
+			cmp 
+		Slim::Utils::Unicode::utf8toLatin1Transliterate(getString($b, $client));
+	} keys %handlers;
+	
+	return wantarray ? @handlerStrings : \@handlerStrings;
 }
 
 sub dontStopTheMusicSetting {
@@ -115,11 +131,9 @@ sub dontStopTheMusicSetting {
 	
 	my $i = 1;
 	
-	foreach (sort {
-		lc(getString($a, $client)) cmp lc(getString($b, $client));
-	} keys %handlers) {
+	foreach ( getSortedHandlerTokens($client) ) {
 		$request->setResultLoopHash('item_loop', $i, {
-			text => getString($_),
+			text => getString($_, $client),
 			radio => ($_ eq $provider) ? 1 : 0,
 			actions => {
 				do => {
@@ -195,20 +209,13 @@ sub onPlaylistChange {
 	} 
 }
 
-sub registerFavorites {
-	if (my $favsObject = Slim::Utils::Favorites->new()) {
-		foreach my $fav (@{$favsObject->all}) {
-			__PACKAGE__->registerHandler($fav->{title}, sub {
-				$_[1]->($_[0], [$fav->{url}]);
-			});
-		}
-	}
-}
-
 sub dontStopTheMusic {
 	my ($client) = @_;
 	
 	my $class = __PACKAGE__;
+	
+	$client = $client->master;
+	$client->pluginData( playlist => 0 );
 	
 	my $songIndex = Slim::Player::Source::streamingSongIndex($client) || 0;
 	my $songsRemaining = Slim::Player::Playlist::count($client) - $songIndex - 1;
@@ -241,8 +248,10 @@ sub dontStopTheMusic {
 		$handler->( $client, sub {
 			my ($client, $tracks) = @_;
 			
-			if ( $tracks && scalar @$tracks ) {
+			# we don't want duplicates in the playlist
+			$tracks = __PACKAGE__->deDupePlaylist($client, $tracks);
 				
+			if ( $tracks && scalar @$tracks ) {
 				if ( Slim::Player::Playlist::count($client) + scalar(@$tracks) > preferences('server')->get('maxPlaylistLength') ) {
 					# Delete tracks before this one on the playlist
 					for (my $i = 0; $i < scalar(@$tracks); $i++) {
@@ -266,15 +275,53 @@ sub dontStopTheMusic {
 			elsif ( main::INFOLOG && $log->is_info ) {
 				$log->info("No matching tracks found for current playlist!");
 			}
+
+			$client->pluginData(playlist => 0);
 		} ) if $handler;
 
 	}
+}
+
+sub deDupePlaylist {
+	my ( $class, $client, $tracks ) = @_;
+
+	if ( $tracks && ref $tracks && scalar @$tracks ) {
+		my $playlist = $client->pluginData('playlist');
+		
+		if ( !($playlist && ref $playlist) ) {
+			$playlist = { map {
+				my $url = blessed($_) ? $_->url : $_;
+				$url => 1;
+			} @{Slim::Player::Playlist::playList($client)} };
+			
+			$client->pluginData( playlist => $playlist );
+		}
+		
+		$tracks = $class->deDupe($tracks, { map { $_ => 1 } keys %$playlist } );
+	}
+	
+	return $tracks;
+}
+
+sub deDupe {
+	my ( $class, $tracks, $seen ) = @_;
+			
+	if ( $tracks && ref $tracks && scalar @$tracks ) {
+		$seen ||= {};
+		$tracks = [ grep {
+			!$seen->{$_}++
+		} @$tracks ];
+	}
+	
+	return $tracks;
 }
 
 sub getMixableProperties {
 	my ($class, $client, $count) = @_;
 	
 	return unless $client;
+	
+	$client = $client->master;
 
 	my ($trackId, $artist, $title, $duration, $tracks);
 	
@@ -316,7 +363,9 @@ sub getMixableProperties {
 sub getMixablePropertiesFromTrack {
 	my ($class, $client, $track) = @_;
 	
-	return unless blessed $track;
+	return unless $client && blessed $track;
+
+	$client = $client->master;
 
 	my $url    = $track->url;
 	my $id     = $track->id;

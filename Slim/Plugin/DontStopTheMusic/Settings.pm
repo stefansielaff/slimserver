@@ -32,15 +32,15 @@ sub prefs {
 
 	return if (!defined $client);
 
-	return ($prefs->client($client), 'provider');
+	return ($prefs->client($client->master), 'provider');
 }
 
 sub handler {
 	my ($class, $client, $paramRef) = @_;
 
-	$paramRef->{handlers} = [ sort {
-		lc(Slim::Plugin::DontStopTheMusic::Plugin::getString($a, $client)) cmp lc(Slim::Plugin::DontStopTheMusic::Plugin::getString($b, $client));
-	} keys %{Slim::Plugin::DontStopTheMusic::Plugin->getHandlers()} ];
+	$client = $client->master,
+
+	$paramRef->{handlers} = Slim::Plugin::DontStopTheMusic::Plugin::getSortedHandlerTokens($client);
 	
 	return $class->SUPER::handler($client, $paramRef);
 }
