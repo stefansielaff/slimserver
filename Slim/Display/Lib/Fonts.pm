@@ -98,10 +98,13 @@ tie my %TTFCache, 'Tie::Cache::LRU', 256;
 # template for unpacking strings: U - unpacks Unicode chars into ords, C - is needed for 5.6 perl's
 my $unpackTemplate = ($] > 5.007) ? 'U*' : 'C*';
 
+<<<<<<< HEAD
 # Bug 3535 - perl < 5.8.5 uses a different Bidi property class.
 #my $bidiR = ($] <= 5.008004) ? qr/\p{BidiR}/ : qr/\p{BidiClass:R}/;
 #my $bidiL = ($] <= 5.008004) ? qr/\p{BidiL}/ : qr/\p{BidiClass:L}/;
 
+=======
+>>>>>>> refs/remotes/Logitech/public/7.9
 my $bidiR = qr/\p{BidiClass:R}/;
 my $bidiL = qr/\p{BidiClass:L}/;
 
