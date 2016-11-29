@@ -326,7 +326,7 @@ sub gotRSS {
 	my ($client, $url, $feed, $params) = @_;
 
 	# Include an item to access feed info
-	if (($feed->{'items'}->[0]->{'value'} ne 'description') &&
+	if (($feed->{'items'}->[0]->{'value'} && $feed->{'items'}->[0]->{'value'} ne 'description') &&
 		# skip this if xmlns:slim is used, and no description found
 		!($feed->{'xmlns:slim'} && !$feed->{'description'})) {
 
@@ -537,6 +537,7 @@ sub gotOPML {
 		# keep track of station icons
 		if ( 
 			( $item->{play} || $item->{playlist} || ($item->{type} && ($item->{type} eq 'audio' || $item->{type} eq 'playlist')) )
+			&& $item->{url} && !ref $item->{url}
 			&& $item->{url} =~ /^http/ 
 			&& $item->{url} !~ m|\.com/api/\w+/v1/opml| 
 			&& ( my $cover = $item->{image} || $item->{cover} )
@@ -1238,7 +1239,7 @@ sub playItem {
 		$type = 'playlist';
 	}
 	
-	main::DEBUGLOG && $log->debug("Playing item, action: $action, type: $type, $url");
+	main::DEBUGLOG && $log->is_debug && $log->debug("Playing item, action: $action, type: $type, $url");
 	
 	my $playalbum = $prefs->client($client)->get('playtrackalbum');
 

@@ -42,6 +42,12 @@ my $log = logger('favorites');
 
 my $prefs = preferences('plugin.favorites');
 
+# make sure the value is defined, otherwise it would be enabled again
+$prefs->setChange( sub {
+	$prefs->set($_[0], 0) unless defined $_[1];
+}, 'registerDSTM' );
+
+
 # support multiple edditing sessions at once - indexed by sessionId.  [Default to favorites editting]
 my $nextSession = 2; # session id 1 = favorites
 tie my %sessions, 'Tie::Cache::LRU', 4;
@@ -1011,7 +1017,7 @@ sub _objectInfoHandler {
 	};
 	
 	my $title;
-	if ($objectType eq 'artist') {
+	if ($objectType && $objectType eq 'artist') {
 		$title = $obj->name;
 	} else {
 		$title = $obj->title;
