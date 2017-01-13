@@ -22,6 +22,8 @@ package Slim::Utils::OS::Synology;
 # This module is trying to provide customisations for all these options.
 
 use strict;
+
+use Config;
 use File::Spec::Functions qw(:ALL);
 use FindBin qw($Bin);
 
@@ -35,6 +37,7 @@ sub initDetails
 	my $class = shift;
 
 	$class->{osDetails} = $class->SUPER::initDetails();
+	$class->{osDetails}->{osArch} ||= $Config{'archname'};
 
 	$class->{osDetails}->{isDiskStation} = 1;
 
